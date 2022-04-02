@@ -1,148 +1,260 @@
 import type { NextPage } from "next";
-import Head from "next/head";
-import Image from "next/image";
-import { useEffect, useState } from "react";
-import styles from "../styles/Home.module.css";
+import {
+  ChangeEventHandler,
+  FC,
+  MouseEventHandler,
+  MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 const Home: NextPage = () => {
-  const [pokemon, setPokemon] = useState<Record<string, any> | null>(null);
-  const [search, setSearch] = useState<string>("");
-  const [error, setError] = useState<Error | null>(null);
-  const [favs, setFavs] = useState<string[]>([]);
+  let ref: MutableRefObject<FavoriteRefObject> | null = null;
 
-  const handleAddFav = (fav: string) => (e: any) => {
-    if (favs.includes(fav)) {
-      return
-    }
+  const onFavoriteClick = useCallback(
+    (favorite: string) => {
+      if (ref?.current.addFavorite) {
+        ref.current.addFavorite(favorite);
+      }
+    },
+    [ref]
+  );
 
-    setFavs([...favs, fav]);
-  };
-
-  const handleDelFavClick = (fav: string) => (e: any) => {
-    setFavs(favs.filter(_fav => _fav !== fav));
-  };
-
-  const handleSearchChange = (e: any) => {
-    e.preventDefault();
-
-    setSearch(e.target.value);
-  };;
-
-  useEffect(() => {
-    if (search.length) {
-      fetch(`https://pokeapi.co/api/v2/pokemon/${search}`)
-        .then((res) => res.json())
-        .then(setPokemon)
-        .catch((err) => {
-          setError(err);
-          setPokemon(null);
-          console.error(err);
-        });
-    } else {
-      setPokemon(null);
-      setError(null);
-    }
-  }, [search]);
   return (
     <div className="container">
-      <div className="search__container">
-        <img src="/logo.svg" className="logo" />
-        <div className="search__container-wrapper">
-          <div className="search__card">
-            <div className="search__input">
-              <div className="search__icon">
-                <img src="/search.svg" alt="" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={handleSearchChange}
-                placeholder="Search"
-                maxLength={50}
-              />
-              <div className="search__count">{search.length}/50</div>
+      <SearchSection onFavoriteClick={onFavoriteClick} />
+      <FavoriteSection setFavoritesRef={(favoriteRef) => (ref = favoriteRef)} />
+    </div>
+  );
+};
+
+export default Home;
+
+type SearchSectionProps = {
+  onFavoriteClick: (name: string) => any;
+};
+
+const SearchSection: FC<SearchSectionProps> = (props) => {
+  const [state, setState] = useState({
+    pokemon: null as Record<string, any> | null,
+    search: "",
+    loading: false,
+    error: null as Error | null,
+  });
+
+  const { search, pokemon, error, loading } = state;
+  const { onFavoriteClick } = props;
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!search.length) {
+        return setState((s) => ({ ...s, pokemon: null, error: null }));
+      }
+
+      setState((s) => ({ ...s, loading: true }));
+
+      try {
+        const url = `https://pokeapi.co/api/v2/pokemon/${search.toLowerCase()}`;
+
+        const res = await fetch(url);
+        const pokemon = await res.json();
+
+        setState((s) => ({ ...s, pokemon, error: null, loading: false }));
+      } catch (error) {
+        setState((s) => ({
+          ...s,
+          pokemon: null,
+          error: error as Error,
+          loading: false,
+        }));
+      }
+
+      return;
+    }
+
+    fetchData();
+  }, [search]);
+
+  const isShowNotfound = error && !pokemon && !loading;
+  const isShowPlaceholder = !error && !pokemon && !loading;
+  const isShowPokemon = !!pokemon && !loading;
+  const isShowLoading = loading;
+
+  const handleFavoriteClick: MouseEventHandler = useCallback(
+    (e) => {
+      if (pokemon?.name?.length) {
+        onFavoriteClick(pokemon?.name);
+      }
+
+      e.preventDefault();
+    },
+    [pokemon, onFavoriteClick]
+  );
+
+  const handleChange: ChangeEventHandler<HTMLInputElement> = useCallback(
+    (e) => {
+      setState((oldState) => ({ ...oldState, search: e.target.value }));
+
+      e.preventDefault();
+    },
+    []
+  );
+
+  const img = pokemon?.sprites?.other?.dream_world?.front_default ?? "";
+
+  return (
+    <div className="search__container">
+      <img src="/logo.svg" className="logo" />
+      <div className="search__container-wrapper">
+        <div className="search__card">
+          <div className="search__input">
+            <div className="search__icon">
+              <img src="/search.svg" alt="" />
             </div>
-            {error && !pokemon && (
-              <div className="search__not-found">Not found</div>
-            )}
-            {!error && !pokemon && (
-              <div className="search__initial-text">
-                Try search for Pokémon by their name
-              </div>
-            )}
-            {pokemon && (
-              <div className="pokemon">
-                <div>
-                  <img
-                    className="pokemon__img"
-                    src={
-                      pokemon?.sprites?.other?.dream_world.front_default ?? ""
-                    }
-                    alt="not found"
-                  />
-                </div>
-
-                <div className="pokemon__content">
-                  <div className="pokemon__header">
-                    <div className="pokemon__title">{pokemon.name}</div>
-                    <img src="/fav.svg" onClick={handleAddFav(pokemon.name)} />
-                  </div>
-
-                  <div className="pokemon__attributes">
-                    <div className="pokemon__attribute">
-                      <div className="pokemon__attribute-key">Weight</div>
-                      <div className="pokemon__attribute-value">
-                        {pokemon.weight} kg
-                      </div>
-                    </div>
-                    <div className="pokemon__attribute">
-                      <div className="pokemon__attribute-key">Height</div>
-                      <div className="pokemon__attribute-value">
-                        {pokemon.height} cm
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pokemon__versions">
-                    <div className="pokemon__verions-title">Versions</div>
-                    <div className="pokemon__version-items">
-                      {pokemon.game_indices?.map?.((game_index: any) => (
-                        <span
-                          key={game_index?.game_index}
-                          className="pokemon__pill"
-                        >
-                          <span className="pokemon__pill-text">
-                            {game_index?.version?.name}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <input
+              type="text"
+              value={search}
+              onChange={handleChange}
+              placeholder="Search"
+              maxLength={50}
+            />
+            <div className="search__count">{search.length}/50</div>
           </div>
-        </div>
-      </div>
-
-      <div className="favorite__container">
-        <h2 className="favorite__title">Favorite</h2>
-        <div className="favorite__items">
-          {favs.map((fav) => (
-            <div
-              key={fav}
-              className="favorite__item"
-              data-fav-key={fav}
-              onClick={handleDelFavClick(fav)}
-            >
-              {fav}
-              <img src="/close.svg" />
+          {isShowNotfound && <div className="search__not-found">Not found</div>}
+          {isShowPlaceholder && (
+            <div className="search__initial-text">
+              Try search for Pokémon by their name
             </div>
-          ))}
+          )}
+          {isShowLoading && <div className="search__initial-text">Loading</div>}
+          {isShowPokemon && (
+            <div className="pokemon">
+              <div>
+                <img className="pokemon__img" src={img} alt="not found" />
+              </div>
+
+              <div className="pokemon__content">
+                <div className="pokemon__header">
+                  <div className="pokemon__title">{pokemon?.name}</div>
+                  <img src="/fav.svg" onClick={handleFavoriteClick} />
+                </div>
+
+                <div className="pokemon__attributes">
+                  <div className="pokemon__attribute">
+                    <div className="pokemon__attribute-key">Weight</div>
+                    <div className="pokemon__attribute-value">
+                      {pokemon?.weight} kg
+                    </div>
+                  </div>
+                  <div className="pokemon__attribute">
+                    <div className="pokemon__attribute-key">Height</div>
+                    <div className="pokemon__attribute-value">
+                      {pokemon?.height} cm
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pokemon__versions">
+                  <div className="pokemon__verions-title">Versions</div>
+                  <div className="pokemon__version-items">
+                    {pokemon?.game_indices?.map?.((gameIndex: any) => (
+                      <span
+                        key={gameIndex?.game_index}
+                        className="pokemon__pill"
+                      >
+                        <span className="pokemon__pill-text">
+                          {gameIndex?.version?.name}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-export default Home;
+type FavoriteRefObject = {
+  addFavorite: (favorite: string) => any;
+};
+
+type FavoriteSectionProps = {
+  setFavoritesRef: (ref: MutableRefObject<FavoriteRefObject>) => any;
+};
+
+const FavoriteSection: FC<FavoriteSectionProps> = (props) => {
+  const { setFavoritesRef } = props;
+  const [favorites, setFavorites] = useState<string[]>([]);
+
+  const addFavorite = useCallback(
+    (favorite: string) => {
+      setFavorites((oldFavorites) => {
+        if (oldFavorites.includes(favorite)) {
+          return oldFavorites;
+        }
+
+        return [...oldFavorites, favorite];
+      });
+    },
+    [setFavorites]
+  );
+
+  const handleDeleteFavoriteClick = useCallback(
+    (newFavorite: string) => {
+      setFavorites((oldFavorites) =>
+        oldFavorites.filter((favorite) => favorite !== newFavorite)
+      );
+    },
+    [setFavorites]
+  );
+
+  const ref = useRef({ addFavorite });
+
+  useEffect(() => {
+    setFavoritesRef(ref);
+  }, [setFavoritesRef]);
+
+  return (
+    <div className="favorite__container">
+      <h2 className="favorite__title">Favorite</h2>
+      <div className="favorite__items">
+        {favorites?.map?.((favorite) => (
+          <FavoriteItem
+            key={favorite}
+            text={favorite}
+            onDeleteClick={handleDeleteFavoriteClick}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+type FavoriteItemProps = {
+  text: string;
+  onDeleteClick: (key: string) => any;
+};
+
+const FavoriteItem: FC<FavoriteItemProps> = (props) => {
+  const { text, onDeleteClick } = props;
+  const handleClick: MouseEventHandler = useCallback(
+    (e) => {
+      onDeleteClick(text);
+      e.preventDefault();
+    },
+    [onDeleteClick, text]
+  );
+
+  return (
+    <div className="favorite__item" onClick={handleClick}>
+      {props.text}
+      <img src="/close.svg" />
+    </div>
+  );
+};
